@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Prompt Generator & Chatbot</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; margin: 20px; background-color: #f8f8f8; color: #333; }
+        h2, h3 { color: #0056b3; }
+        .form-container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        label { font-weight: bold; margin-bottom: 5px; display: block; }
+        textarea { width: 98%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 15px; resize: vertical; }
+        select { padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 15px; width: 100%; max-width: 300px; display: block; }
+        button { background-color: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px; margin-bottom: 10px; }
+        button:hover { background-color: #218838; }
+        .prompt-output-container { background:#e9ecef; padding:15px; border-radius:5px; border: 1px solid #ced4da; margin-top: 10px; margin-bottom: 20px; }
+        .prompt-text { white-space: pre-wrap; margin-bottom: 10px; }
+        ul { list-style-type: disc; margin-left: 20px; padding-left: 0; }
+        ul li { margin-bottom: 5px; }
+        #loadingMessage { display: none; color: #0056b3; font-weight: bold; margin-top: 10px; }
+
+        /* Chatbot Styles */
+        .chatbot-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 500px; /* Fixed height for chat area */
+            border: 1px solid #ddd;
+        }
+        .chat-history {
+            flex-grow: 1; /* Takes available space */
+            overflow-y: auto; /* Scroll for history */
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #fcfcfc;
+            border-radius: 4px;
+        }
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .chat-message.user {
+            background-color: #d1e7dd; /* Light green */
+            align-self: flex-end;
+            margin-left: auto; /* Pushes to the right */
+        }
+        .chat-message.model {
+            background-color: #f8d7da; /* Light red */
+            align-self: flex-start;
+            margin-right: auto; /* Pushes to the left */
+        }
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .chat-input-area textarea {
+            flex-grow: 1;
+            margin-bottom: 0; /* Override default textarea margin */
+            height: 40px; /* Initial height */
+            min-height: 40px;
+            max-height: 120px; /* Max height before scroll */
+            resize: vertical;
+        }
+        .chat-loading {
+            color: #0056b3;
+            font-weight: bold;
+            margin-left: 10px;
+            display: none;
+        }
+        .chat-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h2>AI Prompt Generator & Chatbot</h2>
+
+    <div class="form-container">
+        <label for="task_description">Your Initial Task Description:</label><br>
+        <textarea id="task_description" rows="8" cols="60" placeholder="e.g., I need a poem about outer space for children."></textarea><br><br>
+
+        <label for="category">Select Category:</label><br>
+        <select id="category"></select><br><br>
+
+        <button id="generateButton">Generate Prompt</button>
+        <div id="loadingMessage">Generating... Please wait.</div>
+    </div>
+
+    <hr style="margin-top: 20px; margin-bottom: 20px; border: 0; border-top: 1px solid #eee;">
+
+    <h3>Refined Prompt:</h3>
+    <div class="prompt-output-container">
+        <pre class="prompt-text" id="refinedPromptOutput">Your refined prompt will appear here.</pre>
+        <input type="hidden" id="currentRefinedPromptHidden">
+        <input type="hidden" id="originalTaskForModHidden">
+        <input type="hidden" id="originalCategoryLabelForModHidden">
+        <input type="hidden" id="currentCategoryIdHidden">
+        <button id="startChatWithPromptButton">Start Chat with this Prompt</button>
+    </div>
+
+    <h3 style="margin-top: 20px;">Specific Changes to Refined Prompt:</h3>
+    <label for="user_modification_instructions">Add instructions to modify the above prompt (e.g., "Make it shorter", "Add more detail about X"):</label><br>
+    <textarea id="user_modification_instructions" rows="4" cols="60" placeholder="e.g., Make it more formal and add a call to action."></textarea><br><br>
+    <button id="applyChangesButton">Apply Changes</button>
+
+    <h3>AI Explanation:</h3>
+    <ul id="explanationOutput"></ul>
+
+    <h3>AI Suggestions:</h3>
+    <ul id="suggestionsOutput"></ul>
+
+    <hr style="margin-top: 20px; margin-bottom: 20px; border: 0; border-top: 1px solid #eee;">
+
+    <h3>Interactive Chat with LLM:</h3>
+    <div class="chatbot-container">
+        <div class="chat-actions">
+            <button id="newChatButton">New Chat</button>
+        </div>
+        <div class="chat-history" id="chatHistory">
+            </div>
+        <div class="chat-input-area">
+            <textarea id="chatInput" rows="1" placeholder="Type your message here..." disabled></textarea>
+            <button id="sendChatButton" disabled>Send</button>
+            <div id="chatLoading" class="chat-loading">Thinking...</div>
+        </div>
+    </div>
+    <script>
+        const API_BASE_URL = "http://127.0.0.1:8000/api";
+        const CHAT_HISTORY_STORAGE_KEY = 'promptGenChatHistory'; // Key for localStorage
+
+        // Main prompt generation elements
+        const taskDescriptionInput = document.getElementById('task_description');
+        const categorySelect = document.getElementById('category');
+        const generateButton = document.getElementById('generateButton');
+        const applyChangesButton = document.getElementById('applyChangesButton');
+        const refinedPromptOutput = document.getElementById('refinedPromptOutput');
+        const explanationOutput = document.getElementById('explanationOutput');
+        const suggestionsOutput = document.getElementById('suggestionsOutput');
+        const userModificationInstructionsInput = document.getElementById('user_modification_instructions');
+        const loadingMessage = document.getElementById('loadingMessage');
+
+        // Hidden fields for passing context
+        const currentRefinedPromptHidden = document.getElementById('currentRefinedPromptHidden');
+        const originalTaskForModHidden = document.getElementById('originalTaskForModHidden');
+        const originalCategoryLabelForModHidden = document.getElementById('originalCategoryLabelForModHidden');
+        const currentCategoryIdHidden = document.getElementById('currentCategoryIdHidden');
+
+        const NO_SELECTION_CATEGORY_ID = "please_select";
+
+        // Chatbot elements
+        const chatHistoryDiv = document.getElementById('chatHistory');
+        const chatInput = document.getElementById('chatInput');
+        const sendChatButton = document.getElementById('sendChatButton');
+        const newChatButton = document.getElementById('newChatButton');
+        const startChatWithPromptButton = document.getElementById('startChatWithPromptButton');
+        const chatLoading = document.getElementById('chatLoading');
+
+        // Conversation history state
+        let conversationHistory = []; // Stores messages in [{role: 'user', parts: [{text: '...'}]}, ...] format
+
+        // NEW: Helper functions for localStorage
+        function saveChatHistory() {
+            localStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(conversationHistory));
+        }
+
+        function loadChatHistory() {
+            const storedHistory = localStorage.getItem(CHAT_HISTORY_STORAGE_KEY);
+            if (storedHistory) {
+                try {
+                    conversationHistory = JSON.parse(storedHistory);
+                    conversationHistory.forEach(msg => {
+                        // Assuming msg.parts is always a list with a single text part for simplicity
+                        displayChatMessage(msg.role, msg.parts[0].text, false); // Don't save again
+                    });
+                    return true; // History loaded
+                } catch (e) {
+                    console.error("Failed to parse chat history from localStorage", e);
+                    localStorage.removeItem(CHAT_HISTORY_STORAGE_KEY); // Clear corrupted data
+                    return false;
+                }
+            }
+            return false; // No history found
+        }
+
+        // Function to scroll chat history to bottom
+        function scrollToBottom() {
+            chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+        }
+
+        // Function to display a message in the chat history UI
+        function displayChatMessage(role, text, save = true) { // Added 'save' parameter
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('chat-message', role);
+            messageElement.textContent = text;
+            chatHistoryDiv.appendChild(messageElement);
+            scrollToBottom();
+            if (save) { // Only save if it's a new message being added to conversationHistory
+                // This line is slightly redundant with saveChatHistory in sendChatMessage,
+                // but good for clarity if you were to add direct display without send.
+                // For this setup, sendChatMessage already handles saving.
+            }
+        }
+
+        // Function to send a message to the chat API
+        async function sendChatMessage(message) {
+            if (!message.trim()) return;
+
+            // Add user message to history and UI
+            conversationHistory.push({ role: 'user', parts: [{ text: message }] });
+            displayChatMessage('user', message); // Display user message
+            saveChatHistory(); // Save immediately after adding user message
+
+            chatInput.value = ''; // Clear input
+
+            sendChatButton.disabled = true;
+            chatInput.disabled = true;
+            chatLoading.style.display = 'inline-block';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ history: conversationHistory }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || response.statusText}`);
+                }
+
+                const data = await response.json();
+                const modelResponse = data.model_response;
+
+                // Add model response to history and UI
+                conversationHistory.push({ role: 'model', parts: [{ text: modelResponse }] });
+                displayChatMessage('model', modelResponse); // Display model response
+                saveChatHistory(); // Save immediately after adding model response
+
+            } catch (error) {
+                console.error("Error in chat:", error);
+                displayChatMessage('model', `Error: ${error.message}. Please try again or start a new chat.`);
+            } finally {
+                sendChatButton.disabled = false;
+                chatInput.disabled = false;
+                chatLoading.style.display = 'none';
+                scrollToBottom();
+            }
+        }
+
+        // Function to start a new chat (clears history and local storage)
+        function startNewChat() {
+            conversationHistory = [];
+            localStorage.removeItem(CHAT_HISTORY_STORAGE_KEY); // Clear from local storage
+            chatHistoryDiv.innerHTML = ''; // Clear UI
+            chatInput.value = '';
+            chatInput.disabled = false;
+            sendChatButton.disabled = false;
+            displayChatMessage('model', 'Hello! How can I help you today?'); // Initial greeting
+        }
+
+        // --- Existing Functions (Modified for Chatbot Integration) ---
+
+        async function fetchCategories() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/categories`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const categories = await response.json();
+                let optionsHtml = `<option value="${NO_SELECTION_CATEGORY_ID}" selected>-- Please select a category --</option>`;
+                categories.forEach(cat => {
+                    optionsHtml += `<option value="${cat.id}">${cat.label}</option>`;
+                });
+                categorySelect.innerHTML = optionsHtml;
+            } catch (error) {
+                console.error("Error fetching categories:", error);
+                alert("Failed to load categories. Please check the backend server.");
+            }
+        }
+
+        function displayResults(data) {
+            refinedPromptOutput.textContent = data.optimized_prompt;
+            explanationOutput.innerHTML = data.explanation.map(item => `<li>${item}</li>`).join('');
+            suggestionsOutput.innerHTML = data.suggestions.map(item => `<li>${item}</li>`).join('');
+
+            currentRefinedPromptHidden.value = data.optimized_prompt;
+            originalTaskForModHidden.value = data.original_task_for_mod;
+            originalCategoryLabelForModHidden.value = data.original_category_label_for_mod;
+            currentCategoryIdHidden.value = data.current_category_id;
+
+            userModificationInstructionsInput.value = '';
+        }
+
+        generateButton.addEventListener('click', async () => {
+            const taskDescription = taskDescriptionInput.value.trim();
+            const category = categorySelect.value;
+
+            if (!taskDescription) {
+                alert("Please enter a task description.");
+                return;
+            }
+
+            loadingMessage.style.display = 'block';
+            generateButton.disabled = true;
+            applyChangesButton.disabled = true;
+            startChatWithPromptButton.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/generate-prompt`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        task_description: taskDescription,
+                        category: category
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayResults(data);
+
+            } catch (error) {
+                console.error("Error generating prompt:", error);
+                alert("Failed to generate prompt: " + error.message);
+            } finally {
+                loadingMessage.style.display = 'none';
+                generateButton.disabled = false;
+                applyChangesButton.disabled = false;
+                startChatWithPromptButton.disabled = false;
+            }
+        });
+
+        applyChangesButton.addEventListener('click', async () => {
+            const currentRefinedPrompt = currentRefinedPromptHidden.value.trim();
+            const userModificationInstructions = userModificationInstructionsInput.value.trim();
+            const originalTaskForMod = originalTaskForModHidden.value.trim();
+            const originalCategoryLabelForMod = originalCategoryLabelForModHidden.value.trim();
+            const currentCategoryId = currentCategoryIdHidden.value;
+
+            if (!currentRefinedPrompt) {
+                alert("Please generate an initial prompt first.");
+                return;
+            }
+            if (!userModificationInstructions) {
+                alert("Please enter modification instructions.");
+                return;
+            }
+
+            loadingMessage.style.display = 'block';
+            generateButton.disabled = true;
+            applyChangesButton.disabled = true;
+            startChatWithPromptButton.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/modify-prompt`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        current_refined_prompt: currentRefinedPrompt,
+                        user_modification_instructions: userModificationInstructions,
+                        original_task_for_context: originalTaskForMod,
+                        original_category_label_for_context: originalCategoryLabelForMod,
+                        current_category_id: currentCategoryId
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.detail || response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayResults(data);
+
+            } catch (error) {
+                console.error("Error applying changes:", error);
+                alert("Failed to apply changes: " + error.message);
+            } finally {
+                loadingMessage.style.display = 'none';
+                generateButton.disabled = false;
+                applyChangesButton.disabled = false;
+                startChatWithPromptButton.disabled = false;
+            }
+        });
+
+        // --- Chatbot Event Listeners ---
+
+        // Handle sending message on button click
+        sendChatButton.addEventListener('click', () => {
+            sendChatMessage(chatInput.value);
+        });
+
+        // Handle sending message on Enter key press
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { // Allow Shift+Enter for new line
+                e.preventDefault(); // Prevent default Enter behavior (new line)
+                sendChatMessage(chatInput.value);
+            }
+        });
+
+        // Start new chat when button is clicked
+        newChatButton.addEventListener('click', startNewChat);
+
+        // Event listener for the "Start Chat with this Prompt" button
+        startChatWithPromptButton.addEventListener('click', () => {
+            const refinedPrompt = refinedPromptOutput.textContent.trim();
+            if (!refinedPrompt || refinedPrompt === "Your refined prompt will appear here.") {
+                alert("Please generate or refine a prompt first.");
+                return;
+            }
+            sendChatMessage(refinedPrompt);
+        });
+
+
+        // Initial setup on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchCategories();
+            // Try to load history from localStorage
+            const historyLoaded = loadChatHistory();
+            if (!historyLoaded) {
+                // If no history found, start a new chat with a welcome message
+                startNewChat();
+            }
+            // Ensure input and send button are enabled if history was loaded
+            chatInput.disabled = false;
+            sendChatButton.disabled = false;
+        });
+    </script>
+</body>
+</html>
